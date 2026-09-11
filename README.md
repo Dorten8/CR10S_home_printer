@@ -7,15 +7,68 @@
 * **Host Computer:** Raspberry Pi 4B running MainsailOS.
 * *Hardware Quirk:* Uses a standard USB-A to USB-C "dumb" charger to bypass the 2018 Pi 4 USB-C resistor flaw.
 
-* **Power Environment (Split Voltage):**
-  * **12V Rail:** Powered by the original CR-10S Power Supply Unit (PSU) for heated bed and chassis fans.
-  * **24V Rail:** Powered by a 24V DC-DC converter, feeding the SKR Mini E3 V3.0 motherboard and Sprite Extruder Pro toolhead.
+### Power Topology (Hybrid 12V / 24V)
+This system utilizes a split-voltage topology. High-current chassis components run on the original 12V rail, while the SKR motherboard and Sprite toolhead run on an isolated 24V rail.
+
+```text
++-------------------+
+| Original 12V PSU  |
++-------------------+
+  |   |   |
+  |   |   +-- (12V) -----------------------------------> [ Chassis & Exhaust Fans ]
+  |   |
+  |   +------ (12V V+) --------------------------------> [ 300x300 Heated Bed ]
+  |                                                             |
+  +---------- (12V V+ / V-) ----+                               | (Ground Return)
+                                v                               |
+                       +-------------------+                    |
+                       | EXTERNAL MOSFET   |                    |
+                       | - DC IN (12V)     |                    |
+                       | - HOT BED (-)     |<-------------------+
+                       | - CONTROL PORT    |<--+
+                       +-------------------+   | (24V PWM Signal / Polarity independent)
+                                               |
++-------------------+                          |
+| 24V DC-DC Step-Up |                          |
++-------------------+                          |
+  |                                            |
+  +---------- (24V V+ / V-) ----+              |
+                                v              |
+                       +-------------------+   |
+                       | SKR MINI E3 V3.0  |---+ (HB Port / PC9)
+                       +-------------------+
+```
 
 ---
 
-## 2. WIRING & PINOUT MAPPING (SKR Mini E3 V3.0)
+## 2. MOTHERBOARD & TOOLHEAD ROUTING
 
-The hardware has been custom-wired to isolate 12V and 24V components safely:
+Data and power routing from the SKR Mini E3 V3.0 to the toolhead and sensors:
+
+```text
+[ SKR MINI E3 V3.0 ]
+  |
+  |-- Host ---------+--> [ Raspberry Pi 4B ] (MainsailOS via USB-A to USB-C)
+  |
+  |-- Sprite Pro ---+--> (HE0) ----------> [ Heater Cartridge (24V) ]
+  |   Toolhead      |--> (TH0) ----------> [ Thermistor ]
+  |                 |--> (FAN0) ---------> [ Part Cooling Blower ]
+  |                 |--> (FAN1) ---------> [ Heatsink Fan (Auto @ 50°C) ]
+  |                 |--> (E0 Motor) -----> [ Extruder Stepper ]
+  |
+  |-- Sensors ------+--> (E0-STOP) ------> [ BTT SFS V2.0 - Motion Encoder ]
+  |                 |--> (PWR-DET) ------> [ BTT SFS V2.0 - Runout Switch ]
+  |
+  |-- Z-Probe ------+--> (Z-PROBE Port) -> [ BLTouch / 3D Touch Clone ]
+  |   (Unified      |      |-- Pin 1: White  (Trigger Signal)
+  |    5-Pin JST)   |      |-- Pin 2: Black  (Trigger Ground)
+  |                 |      |-- Pin 3: Yellow (Servo Control)
+  |                 |      |-- Pin 4: Red    (5V Power)
+  |                 |      |-- Pin 5: Green  (Servo Ground)
+  |
+  |-- Kinematics ---+--> (X/Y/Z Motors) -> [ Frame Steppers ]
+                    |--> (X/Y Stops) ----> [ Physical Endstops ]
+```
 
 ### USB Serial Identifier
 ```ini
@@ -23,39 +76,48 @@ The hardware has been custom-wired to isolate 12V and 24V components safely:
 serial: /dev/serial/by-id/usb-Klipper_stm32g0b1xx_4B0031001250564837383520-if00
 ```
 
-### Extruder / Toolhead (Creality Sprite Extruder Pro - 24V)
-* **Heater Cartridge (50W/24V):** Connected to `PC8` (HE0) and `VBB` (+). Custom 18/20 AWG stranded silicone wire.
-* **Thermistor:** Connected to `TH0` header (`PA0`).
-* **Part Cooling Fan (Blower):** Connected to `FAN0` (`PC6`).
-* **Hotend Heatsink Fan:** Connected to `FAN1` (`PC7`). Auto-starts at 50°C.
-* *Note:* Toolhead wiring interfaces via an 8-pin GX16-8 Aviation plug at the control box.
+---
 
-### Motion System & Dual Z-Axis
-* **X & Y Steppers:** TMC2209 UART drivers (`PC11`/`PC10`). Endstops on `PC0` (X) and `PC1` (Y).
-* **Dual Z Steppers:** Driven by the single Z TMC2209 driver (`PB0`/`PC5`) via parallel headers `ZAM` and `ZBM`.
-* *Hardware Phase Calibration:* Z2 motor cable modified by swapping **Pin 1 and Pin 3** (Circuit 1 invert) so both lead screws turn in 100% sync.
+## 3. CRITICAL PINOUT REFERENCE TABLE (Klipper `printer.cfg`)
 
-### Heated Bed & External MOSFET
-* **Control Method:** External opto-isolated high-current MOSFET board.
-* **Control Wires:** Connected to SKR **`HB+`** (control `+`) and **`HB-`** (control `-`).
-* *Diagnostic Status:* Original MOSFET suffered internal transistor short (stuck ON). Replacement 30A wide-input opto-isolated MOSFET module ordered (AliExpress `1005006615585540`). Bed power cable safely disconnected pending module installation.
+| Component | SKR Header | Klipper Pin | Notes / Hardware State |
+| --- | --- | --- | --- |
+| **Heated Bed (MOSFET)** | `HB` | `PC9` | Active HIGH control (`PC9`). Connect control `+` to `HB+`, `-` to `HB-`. |
+| **Extruder Heater** | `HE0` | `PC8` | 24V / 50W Cartridge. |
+| **Thermistor (Hotend)** | `TH0` | `PA0` | EPCOS 100K B57560G104F. |
+| **Part Cooling Fan** | `FAN0` | `PC6` | 24V Blower. |
+| **Heatsink Fan** | `FAN1` | `PC7` | 24V Fan (Auto @ 50°C). |
+| **BLTouch Trigger** | `Z-PROBE` (Pin 1) | `^PC14` | Pullup `^` required. `Z-DIAG` jumper MUST BE REMOVED. |
+| **BLTouch Servo** | `Z-PROBE` (Pin 3) | `PA1` | `Neo-PWR1` jumper MUST REMAIN to provide 5V power. |
+| **BTT SFS (Motion)** | `E0-STOP` | `PC15` | Motion Encoder. |
+| **BTT SFS (Runout)** | `PWR-DET` | `PC12` | Runout Switch. |
 
-### Sensors & Probes
-* **Filament Sensor:** BTT Smart Filament Sensor (SFS) V2.0.
-  * Motion Encoder (3-wire): Plugged into `E0-STOP` (`PC15`).
-  * Runout Switch (2-wire): Plugged into `PWR-DET` (`PC12`).
-* **Z-Probe:** 3D Touch (BLTouch clone).
-  * Header: Dedicated 5-pin `Z-PROBE` header.
-  * Servo Control Pin: `PA1`.
-  * Trigger Signal Pin: `^PC14`.
+***Notes on Safety:** The external MOSFET maintains galvanic isolation via an internal optocoupler. 12V and 24V domains interact safely via optical signaling.*
 
 ---
 
-## 3. SOFTWARE & FIRMWARE ARCHITECTURE
+## 4. HEATED BED MOSFET TROUBLESHOOTING & LOGIC RESOLUTION
+
+### Initial Symptom & Analysis:
+* **Initial Observation:** When `PC9` was configured, the bed heated past 30°C target. Changing to `!PC9` caused runaway heating even when Klipper commanded `0% PWM` (37°C → 41°C+).
+* **Root Cause 1 (File Path / Permission Lock):** The first time `PC9` was set, Klipper was failing to open `/home/pi/printer_data/config/printer.cfg` due to missing file permissions on the Pi. Klipper was halted in an uninitialized state, leaving MCU pins floating.
+* **Root Cause 2 (`!PC9` Inversion):** When permissions were fixed, `!PC9` (inverted) was active. Because `!PC9` is inverted, Klipper outputting `0% PWM` drove the pin HIGH, which forced the Makerbase optocoupler **100% ON**.
+* **Final Resolution:** Restored **`heater_pin: PC9`** (non-inverted active HIGH) once permissions were fixed. Klipper now holds `PC9` LOW (0V) when off, and modulates PWM cleanly on demand.
+* **Thermal Inertia Note:** The CR-10S 300x300mm aluminum bed has large thermal mass. When heating to a low target (e.g. 30°C), residual stored heat naturally coasts up to ~38°C before slowly radiating down.
+
+---
+
+## 5. SOFTWARE & FIRMWARE ARCHITECTURE
 
 * **Operating System:** MainsailOS (Debian Lite) running on Raspberry Pi 4B.
-* **Network:** Static Wi-Fi `192.168.74.2` and mDNS (`3d-print-dorten.local`).
-* **Web UI / API:** Mainsail + Moonraker (`http://192.168.74.2`).
+* **Network (Dual-Profile Wi-Fi):**
+  * **Primary (Home):** DHCP Reserved **`192.168.0.108`** (SSID: `WELOVEYOU`, MAC: `DC:A6:32:8D:36:98`).
+  * **Fallback (School):** Static `192.168.74.2` / DHCP (SSID: `sensors`).
+  * **Local Hostname / mDNS:** `3d-print-dorten.local` (resolves natively across LAN).
+* **Web UI / API:**
+  * **Mainsail Web UI (Home):** [http://192.168.0.108](http://192.168.0.108) or [http://3d-print-dorten.local](http://3d-print-dorten.local)
+  * **Moonraker API:** `http://192.168.0.108:7125`
+* **Remote Access (Planned):** NordVPN Meshnet peer-to-peer encrypted WireGuard tunnel for zero-port-forwarding remote management.
 * **MCU Firmware Target (`klipper.bin`):**
   * Micro-controller Architecture: `STMicroelectronics STM32`
   * Processor model: `STM32G0B1`
@@ -64,19 +126,19 @@ serial: /dev/serial/by-id/usb-Klipper_stm32g0b1xx_4B0031001250564837383520-if00
 
 ---
 
-## 4. PROJECT STATUS & COMMISSIONING CHECKLIST
+## 6. CURRENT PROJECT STATUS
 
 1. ✅ **Physical Wiring & Pinout Mapping:** Custom JST-XH splicing and 8-pin GX16 aviation connector completed.
-2. ✅ **Host Networking:** Raspberry Pi live on Wi-Fi (`192.168.74.2`), passwordless SSH configured for `dorten`.
+2. ✅ **Host Networking:** Dual Wi-Fi active (Home `WELOVEYOU` @ `192.168.0.108`, School `sensors`), passwordless SSH operational for `dorten`.
 3. ✅ **Firmware Compilation & Flashing:** SKR Mini E3 V3.0 successfully flashed with Klipper firmware.
 4. ✅ **Klipper Connection:** MCU communicating cleanly over USB (`usb-Klipper_stm32g0b1xx_4B0031001250564837383520-if00`).
-5. ✅ **Mainsail Web Interface:** Online and functional.
+5. ✅ **Mainsail Web Interface:** Online and functional at [http://192.168.0.108](http://192.168.0.108) / [http://3d-print-dorten.local](http://3d-print-dorten.local).
 6. ✅ **Toolhead & Motion System:** Toolhead heating verified, dual Z motors synchronized in phase.
-7. ⚠️ **Heated Bed MOSFET:** Replacement 30A opto-isolated MOSFET ordered; bed power disconnected for safety until installation.
+7. ✅ **Heated Bed MOSFET Control:** Hardware optocoupler control verified under active HIGH logic (`heater_pin: PC9`).
 
 ---
 
-## 5. DIAGNOSTIC G-CODE MACROS
+## 7. DIAGNOSTIC G-CODE MACROS
 
 Execute directly from the Mainsail console:
 
@@ -84,3 +146,56 @@ Execute directly from the Mainsail console:
 * `STEPPER_BUZZ_ALL` — Sequential move test for X, Y, Z, and Extruder.
 * `TEST_SENSORS` — Queries endstops (`QUERY_ENDSTOPS`), probe (`QUERY_PROBE`), and tests BLTouch pin deploy/retract.
 * `SYSTEM_READY_TEST` — Full motion choreography and homing suite.
+
+---
+
+## 8. REMOTE ACCESS STRATEGY: NORDVPN MESHNET
+
+To securely access the Mainsail web UI, stream webcam feeds, and send print jobs from outside the local network without opening dangerous public ports on the router:
+
+### A. Core Architecture
+* **Protocol:** NordVPN Meshnet creates an encrypted peer-to-peer WireGuard (`nordlynx`) tunnel between trusted devices (Phone, Laptop, Raspberry Pi).
+* **Zero Port-Forwarding:** Inbound router ports (`80`, `7125`, `22`) remain completely closed to the public internet.
+* **Direct P2P Routing:** Traffic travels directly peer-to-peer whenever possible with minimal latency.
+
+### B. Setup Procedure on Host (Pi 4B)
+1. **Install NordVPN Linux CLI:**
+   ```bash
+   sh <(curl -sSf https://downloads.nordcdn.com/apps/linux/install.sh)
+   sudo usermod -aG nordvpn dorten
+   ```
+2. **Headless Login:**
+   ```bash
+   nordvpn login
+   # Follow browser authorization link or run: nordvpn login --token <TOKEN>
+   ```
+3. **Enable Meshnet:**
+   ```bash
+   nordvpn set meshnet on
+   nordvpn set technology nordlynx
+   ```
+4. **Identify Assigned Meshnet Host:**
+   ```bash
+   nordvpn meshnet peer list
+   ```
+   Note the assigned IP (`100.x.x.x`) and Nord private hostname (e.g. `3d-print-dorten-nord.nord`).
+
+### C. Moonraker Whitelist Configuration (`moonraker.conf`)
+Ensure Moonraker accepts WebSocket & HTTP API connections from the Meshnet subnet:
+```ini
+[authorization]
+trusted_clients:
+    192.168.0.0/16
+    10.0.0.0/8
+    127.0.0.0/8
+    100.64.0.0/10    # NordVPN Meshnet CGNAT address range
+cors_domains:
+    *.lan
+    *.local
+    *://*.nord
+```
+
+### D. Client Connection (Everywhere)
+* **Mobile / Laptop Browser:** Open `http://<meshnet-ip>` or `http://<pi-hostname>.nord` to view Mainsail and camera feeds.
+* **OrcaSlicer / PrusaSlicer:** Configure the printer physical host with `http://<meshnet-ip>` for remote one-click slicing and upload.
+* **Mobileraker App:** Connect via `http://<meshnet-ip>:7125` for mobile push notifications and print progress.
