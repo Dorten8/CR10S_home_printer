@@ -132,9 +132,13 @@ serial: /dev/serial/by-id/usb-Klipper_stm32g0b1xx_4B0031001250564837383520-if00
 2. ✅ **Host Networking:** Dual Wi-Fi active (Home `WELOVEYOU` @ `192.168.0.108`, School `sensors`), passwordless SSH operational for `dorten`.
 3. ✅ **Firmware Compilation & Flashing:** SKR Mini E3 V3.0 successfully flashed with Klipper firmware.
 4. ✅ **Klipper Connection:** MCU communicating cleanly over USB (`usb-Klipper_stm32g0b1xx_4B0031001250564837383520-if00`).
-5. ✅ **Mainsail Web Interface:** Online and functional at [http://192.168.0.108](http://192.168.0.108) / [http://3d-print-dorten.local](http://3d-print-dorten.local).
+5. ✅ **Mainsail Web Interface:** Online and functional.
 6. ✅ **Toolhead & Motion System:** Toolhead heating verified, dual Z motors synchronized in phase.
 7. ✅ **Heated Bed MOSFET Control:** Hardware optocoupler control verified under active HIGH logic (`heater_pin: PC9`).
+8. ✅ **BLTouch Homing & Z-Offset:** Clone-safe config implemented (`^PC14`). Hardware Z-DIAG interference ruled out. Z-Offset calibrated and saved.
+9. ✅ **Thermal PID Tuning:** Completed and saved for both Extruder (200°C) and Heated Bed (60°C).
+10. ✅ **Bed Mesh Generation:** Initial 5x5 topology map generated and saved to `printer.cfg`.
+11. ⏳ **Extruder E-Steps Calibration:** Pending hardware jam clearance.
 
 ---
 
@@ -213,3 +217,30 @@ cors_domains:
 * [SKR Mini E3 V3.0 User Manual](https://github.com/bigtreetech/BIGTREETECH-SKR-mini-E3/blob/master/hardware/BTT%20SKR%20MINI%20E3%20V3.0/Hardware/BTT%20E3%20SKR%20MINI%20V3.0-manual.pdf)
 
 *(Note: The V3.0 and V3.0.1 boards share identical firmware configuration parameters and primary IO layouts.)*
+
+---
+
+## 10. CURRENT PENDING TASKS (Hardware & Calibration)
+
+**1. Clear Sprite Extruder Gear Jam:**
+* **Symptom:** Extruder motor turns but filament slips; thumb lever is stuck slightly open.
+* **Diagnosis:** A broken piece of filament is wedged between the dual-drive gears in the cold zone.
+* **Action Required:** Disassemble the Sprite Extruder Pro tension arm to manually remove the plastic obstruction from the gears.
+
+**2. Extruder E-Steps (Rotation Distance) Calibration:**
+* **Context:** The BTT SFS V2 filament motion sensor `sfs_encoder` aborts extrusion at `2.88mm` if it detects slippage. This triggered during our test because the gears were jammed.
+* **Workaround:** When ready to resume calibration, temporarily disable the sensors using:
+  ```gcode
+  SET_FILAMENT_SENSOR SENSOR=sfs_encoder ENABLE=0
+  SET_FILAMENT_SENSOR SENSOR=sfs_switch ENABLE=0
+  ```
+* **Calibration Test:**
+  1. Heat nozzle to 200°C.
+  2. Mark filament exactly 120mm above the BTT SFS sensor top entrance.
+  3. Execute extrusion:
+     ```gcode
+     M83
+     G1 E100 F300
+     ```
+  4. Measure remaining distance to mark. Calculate new `rotation_distance` based on variance from 20mm.
+
