@@ -199,3 +199,17 @@ cors_domains:
 * **Mobile / Laptop Browser:** Open `http://<meshnet-ip>` or `http://<pi-hostname>.nord` to view Mainsail and camera feeds.
 * **OrcaSlicer / PrusaSlicer:** Configure the printer physical host with `http://<meshnet-ip>` for remote one-click slicing and upload.
 * **Mobileraker App:** Connect via `http://<meshnet-ip>:7125` for mobile push notifications and print progress.
+
+---
+
+## 9. MANUFACTURER RESOURCES & SCHEMATICS
+
+**Single Source of Truth (SSoT) Repository:**
+* [BigTreeTech SKR Mini E3 GitHub Repository](https://github.com/bigtreetech/BIGTREETECH-SKR-mini-E3)
+
+**Hardware Documentation (V3.0 / V3.0.1):**
+* [SKR Mini E3 V3.0.1 Pinout PDF (Direct Link)](https://github.com/bigtreetech/BIGTREETECH-SKR-mini-E3/blob/master/hardware/BTT%20SKR%20MINI%20E3%20V3.0.1/Hardware/BTT%20E3%20SKR%20MINI%20V3.0.1_PIN.pdf)
+* [SKR Mini E3 V3.0 Pinout PDF](https://github.com/bigtreetech/BIGTREETECH-SKR-mini-E3/blob/master/hardware/BTT%20SKR%20MINI%20E3%20V3.0/Hardware/BTT%20E3%20SKR%20MINI%20V3.0_PIN.pdf)
+* [SKR Mini E3 V3.0 User Manual](https://github.com/bigtreetech/BIGTREETECH-SKR-mini-E3/blob/master/hardware/BTT%20SKR%20MINI%20E3%20V3.0/Hardware/BTT%20E3%20SKR%20MINI%20V3.0-manual.pdf)
+
+*(Note: The V3.0 and V3.0.1 boards share identical firmware configuration parameters and primary IO layouts.)*
