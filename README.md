@@ -222,3 +222,8 @@ cors_domains:
 
 
 
+
+## 10. POST-ASSEMBLY CALIBRATION NOTES & QUIRKS
+
+* **X-Axis Geometry Shift:** Due to the custom Sprite Extruder Pro mounting bracket, the nozzle sits further to the left than the stock hotend. When the X-axis limit switch is triggered, the nozzle is physically suspended outside the left edge of the print bed. This causes Slicer purge lines (e.g. `X2.0`) to print in mid-air. 
+  * *Pending Fix:* Measure the exact distance from the nozzle to the bed edge when homed, and apply that as a negative `position_endstop` and `position_min` in `[stepper_x]`.
